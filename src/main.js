@@ -113,11 +113,13 @@ const objectMaterial = new THREE.MeshStandardMaterial({
 });
 objectMaterial.transparent = opacity < 1;
 objectMaterial.opacity = opacity;
-objectMaterial.depthWrite = opacity >= 1;
-const outlineMaterial = new THREE.LineBasicMaterial({ color: '#ffffff', depthTest: true, depthWrite: false });
+objectMaterial.depthWrite = true;
+const outlineMaterial = new THREE.LineBasicMaterial({ color: '#ffffff', depthTest: true, depthWrite: false, transparent: true });
 outlineMaterial.toneMapped = false;
 let currentMesh;
 let outlineMesh;
+let silhouetteData;
+const outlineCameraPosition = new THREE.Vector3();
 
 function buildGeometry(shape, parameters) {
   switch (shape.id) {
@@ -133,88 +135,86 @@ function buildGeometry(shape, parameters) {
   }
 }
 
-function addContourLine(group, points, closed = false) {
-  const geometry = new THREE.BufferGeometry().setFromPoints(points);
-  const line = closed
-    ? new THREE.LineLoop(geometry, outlineMaterial)
-    : new THREE.Line(geometry, outlineMaterial);
-  group.add(line);
+function buildSilhouetteData(geometry) {
+  const position = geometry.attributes.position;
+  const vertices = Array.from({ length: position.count }, (_, index) => new THREE.Vector3().fromBufferAttribute(position, index));
+  const vertexKeys = vertices.map((vertex) => [vertex.x, vertex.y, vertex.z].map((value) => Math.round(value * 100000)).join(','));
+  const edgesByKey = new Map();
+  const faces = [];
+  const index = geometry.index;
+  const triangleCount = (index ? index.count : position.count) / 3;
+
+  function addEdge(startIndex, endIndex, faceIndex) {
+    const startKey = vertexKeys[startIndex];
+    const endKey = vertexKeys[endIndex];
+    const forward = startKey < endKey;
+    const key = forward ? `${startKey}|${endKey}` : `${endKey}|${startKey}`;
+    let edge = edgesByKey.get(key);
+    if (!edge) {
+      edge = {
+        start: vertices[forward ? startIndex : endIndex],
+        end: vertices[forward ? endIndex : startIndex],
+        faces: [],
+      };
+      edgesByKey.set(key, edge);
+    }
+    edge.faces.push(faceIndex);
+  }
+
+  for (let triangle = 0; triangle < triangleCount; triangle += 1) {
+    const offset = triangle * 3;
+    const a = vertices[index ? index.getX(offset) : offset];
+    const b = vertices[index ? index.getX(offset + 1) : offset + 1];
+    const c = vertices[index ? index.getX(offset + 2) : offset + 2];
+    const normal = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a));
+    if (normal.lengthSq() < 1e-12) continue;
+    normal.normalize();
+    const faceIndex = faces.length;
+    faces.push({
+      normal,
+      center: new THREE.Vector3().addVectors(a, b).add(c).multiplyScalar(1 / 3),
+    });
+    addEdge(index ? index.getX(offset) : offset, index ? index.getX(offset + 1) : offset + 1, faceIndex);
+    addEdge(index ? index.getX(offset + 1) : offset + 1, index ? index.getX(offset + 2) : offset + 2, faceIndex);
+    addEdge(index ? index.getX(offset + 2) : offset + 2, index ? index.getX(offset) : offset, faceIndex);
+  }
+
+  return { edges: [...edgesByKey.values()], faces, facing: new Uint8Array(faces.length) };
 }
 
-function buildAdditionalContours(shape, parameters, group) {
-  if (shape.id === 'sphere') {
-    for (let index = 1; index <= 6; index += 1) {
-      const theta = (Math.PI * index) / 7;
-      const points = Array.from({ length: 97 }, (_, pointIndex) => {
-        const phi = (2 * Math.PI * pointIndex) / 96;
-        return new THREE.Vector3(
-          parameters.r * Math.sin(theta) * Math.cos(phi),
-          parameters.r * Math.cos(theta),
-          parameters.r * Math.sin(theta) * Math.sin(phi),
-        );
-      });
-      addContourLine(group, points, true);
-    }
+function updateSilhouette() {
+  if (!outlineMesh?.visible || !silhouetteData || !currentMesh) return;
 
-    for (let index = 0; index < 4; index += 1) {
-      const phi = (Math.PI * index) / 4;
-      const points = Array.from({ length: 97 }, (_, pointIndex) => {
-        const theta = (2 * Math.PI * pointIndex) / 96;
-        return new THREE.Vector3(
-          parameters.r * Math.sin(theta) * Math.cos(phi),
-          parameters.r * Math.cos(theta),
-          parameters.r * Math.sin(theta) * Math.sin(phi),
-        );
-      });
-      addContourLine(group, points, true);
-    }
-  }
+  camera.getWorldPosition(outlineCameraPosition);
+  currentMesh.worldToLocal(outlineCameraPosition);
+  silhouetteData.faces.forEach((face, index) => {
+    const toCameraX = outlineCameraPosition.x - face.center.x;
+    const toCameraY = outlineCameraPosition.y - face.center.y;
+    const toCameraZ = outlineCameraPosition.z - face.center.z;
+    silhouetteData.facing[index] = face.normal.x * toCameraX + face.normal.y * toCameraY + face.normal.z * toCameraZ >= 0 ? 1 : 0;
+  });
 
-  if (shape.id === 'torus') {
-    const arc = THREE.MathUtils.degToRad(parameters.arc);
-    const majorSegments = Math.max(24, Math.ceil(96 * parameters.arc / 360));
-    for (let index = 0; index < 8; index += 1) {
-      const tubeAngle = (2 * Math.PI * index) / 8;
-      const points = Array.from({ length: majorSegments + 1 }, (_, pointIndex) => {
-        const majorAngle = (arc * pointIndex) / majorSegments;
-        const ringRadius = parameters.r + parameters.tube * Math.cos(tubeAngle);
-        return new THREE.Vector3(
-          ringRadius * Math.cos(majorAngle),
-          parameters.tube * Math.sin(tubeAngle),
-          ringRadius * Math.sin(majorAngle),
-        );
-      });
-      addContourLine(group, points);
-    }
-
-    const sectionCount = parameters.arc === 360 ? 8 : 9;
-    for (let index = 0; index < sectionCount; index += 1) {
-      const majorAngle = (arc * index) / 8;
-      const points = Array.from({ length: 65 }, (_, pointIndex) => {
-        const tubeAngle = (2 * Math.PI * pointIndex) / 64;
-        const ringRadius = parameters.r + parameters.tube * Math.cos(tubeAngle);
-        return new THREE.Vector3(
-          ringRadius * Math.cos(majorAngle),
-          parameters.tube * Math.sin(tubeAngle),
-          ringRadius * Math.sin(majorAngle),
-        );
-      });
-      addContourLine(group, points, true);
-    }
-  }
-
-  if (shape.id === 'cone') {
-    const top = new THREE.Vector3(0, parameters.h / 2, 0);
-    for (let index = 0; index < parameters.sides; index += 1) {
-      const angle = (2 * Math.PI * index) / parameters.sides;
-      const base = new THREE.Vector3(
-        parameters.r * Math.cos(angle),
-        -parameters.h / 2,
-        parameters.r * Math.sin(angle),
-      );
-      addContourLine(group, [top, base]);
-    }
-  }
+  const position = outlineMesh.geometry.attributes.position;
+  const vertices = position.array;
+  let cursor = 0;
+  silhouetteData.edges.forEach((edge) => {
+    let front = false;
+    let back = false;
+    edge.faces.forEach((faceIndex) => {
+      if (silhouetteData.facing[faceIndex]) front = true;
+      else back = true;
+    });
+    if (!(front && back) && !(edge.faces.length === 1 && front)) return;
+    vertices[cursor] = edge.start.x;
+    vertices[cursor + 1] = edge.start.y;
+    vertices[cursor + 2] = edge.start.z;
+    vertices[cursor + 3] = edge.end.x;
+    vertices[cursor + 4] = edge.end.y;
+    vertices[cursor + 5] = edge.end.z;
+    cursor += 6;
+  });
+  position.needsUpdate = true;
+  outlineMesh.geometry.setDrawRange(0, cursor / 3);
 }
 
 function updateVolume() {
@@ -235,10 +235,12 @@ function updateVolume() {
 function updateGeometry() {
   const geometry = buildGeometry(activeShape, values[activeShape.id]);
   geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
   if (outlineMesh) {
-    outlineMesh.traverse((object) => object.geometry?.dispose());
+    outlineMesh.geometry.dispose();
     outlineMesh = undefined;
   }
+  silhouetteData = undefined;
   if (currentMesh) {
     scene.remove(currentMesh);
     currentMesh.geometry.dispose();
@@ -248,13 +250,18 @@ function updateGeometry() {
   currentMesh.receiveShadow = true;
   currentMesh.rotation.set(0.16, 0.32, 0);
   if (showOutline) {
-    outlineMesh = new THREE.Group();
-    outlineMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 22), outlineMaterial));
-    buildAdditionalContours(activeShape, values[activeShape.id], outlineMesh);
-    outlineMesh.scale.setScalar(1.002);
+    silhouetteData = buildSilhouetteData(geometry);
+    const lineGeometry = new THREE.BufferGeometry();
+    lineGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(silhouetteData.edges.length * 6), 3));
+    lineGeometry.boundingSphere = geometry.boundingSphere.clone();
+    outlineMesh = new THREE.LineSegments(lineGeometry, outlineMaterial);
+    outlineMesh.renderOrder = 1;
+    outlineMesh.scale.setScalar(1.008);
     currentMesh.add(outlineMesh);
   }
+  currentMesh.renderOrder = 0;
   scene.add(currentMesh);
+  updateSilhouette();
   updateVolume();
 }
 
@@ -322,7 +329,7 @@ function setupAppearanceControls() {
     if (objectMaterial.transparent !== isTransparent) objectMaterial.needsUpdate = true;
     objectMaterial.transparent = isTransparent;
     objectMaterial.opacity = opacity;
-    objectMaterial.depthWrite = !isTransparent;
+    objectMaterial.depthWrite = true;
   });
 
   const outlineToggle = document.querySelector('#outline-toggle');
@@ -422,6 +429,7 @@ function animate() {
   const elapsed = clock.getElapsedTime();
   fillLight.position.x = Math.sin(elapsed * 0.35) * 4;
   controls.update();
+  updateSilhouette();
   renderer.render(scene, camera);
 }
 animate();
