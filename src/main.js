@@ -133,6 +133,90 @@ function buildGeometry(shape, parameters) {
   }
 }
 
+function addContourLine(group, points, closed = false) {
+  const geometry = new THREE.BufferGeometry().setFromPoints(points);
+  const line = closed
+    ? new THREE.LineLoop(geometry, outlineMaterial)
+    : new THREE.Line(geometry, outlineMaterial);
+  group.add(line);
+}
+
+function buildAdditionalContours(shape, parameters, group) {
+  if (shape.id === 'sphere') {
+    for (let index = 1; index <= 6; index += 1) {
+      const theta = (Math.PI * index) / 7;
+      const points = Array.from({ length: 97 }, (_, pointIndex) => {
+        const phi = (2 * Math.PI * pointIndex) / 96;
+        return new THREE.Vector3(
+          parameters.r * Math.sin(theta) * Math.cos(phi),
+          parameters.r * Math.cos(theta),
+          parameters.r * Math.sin(theta) * Math.sin(phi),
+        );
+      });
+      addContourLine(group, points, true);
+    }
+
+    for (let index = 0; index < 4; index += 1) {
+      const phi = (Math.PI * index) / 4;
+      const points = Array.from({ length: 97 }, (_, pointIndex) => {
+        const theta = (2 * Math.PI * pointIndex) / 96;
+        return new THREE.Vector3(
+          parameters.r * Math.sin(theta) * Math.cos(phi),
+          parameters.r * Math.cos(theta),
+          parameters.r * Math.sin(theta) * Math.sin(phi),
+        );
+      });
+      addContourLine(group, points, true);
+    }
+  }
+
+  if (shape.id === 'torus') {
+    const arc = THREE.MathUtils.degToRad(parameters.arc);
+    const majorSegments = Math.max(24, Math.ceil(96 * parameters.arc / 360));
+    for (let index = 0; index < 8; index += 1) {
+      const tubeAngle = (2 * Math.PI * index) / 8;
+      const points = Array.from({ length: majorSegments + 1 }, (_, pointIndex) => {
+        const majorAngle = (arc * pointIndex) / majorSegments;
+        const ringRadius = parameters.r + parameters.tube * Math.cos(tubeAngle);
+        return new THREE.Vector3(
+          ringRadius * Math.cos(majorAngle),
+          parameters.tube * Math.sin(tubeAngle),
+          ringRadius * Math.sin(majorAngle),
+        );
+      });
+      addContourLine(group, points);
+    }
+
+    const sectionCount = parameters.arc === 360 ? 8 : 9;
+    for (let index = 0; index < sectionCount; index += 1) {
+      const majorAngle = (arc * index) / 8;
+      const points = Array.from({ length: 65 }, (_, pointIndex) => {
+        const tubeAngle = (2 * Math.PI * pointIndex) / 64;
+        const ringRadius = parameters.r + parameters.tube * Math.cos(tubeAngle);
+        return new THREE.Vector3(
+          ringRadius * Math.cos(majorAngle),
+          parameters.tube * Math.sin(tubeAngle),
+          ringRadius * Math.sin(majorAngle),
+        );
+      });
+      addContourLine(group, points, true);
+    }
+  }
+
+  if (shape.id === 'cone') {
+    const top = new THREE.Vector3(0, parameters.h / 2, 0);
+    for (let index = 0; index < parameters.sides; index += 1) {
+      const angle = (2 * Math.PI * index) / parameters.sides;
+      const base = new THREE.Vector3(
+        parameters.r * Math.cos(angle),
+        -parameters.h / 2,
+        parameters.r * Math.sin(angle),
+      );
+      addContourLine(group, [top, base]);
+    }
+  }
+}
+
 function updateVolume() {
   const p = values[activeShape.id];
   let volume = 0;
@@ -152,7 +236,7 @@ function updateGeometry() {
   const geometry = buildGeometry(activeShape, values[activeShape.id]);
   geometry.computeVertexNormals();
   if (outlineMesh) {
-    outlineMesh.geometry.dispose();
+    outlineMesh.traverse((object) => object.geometry?.dispose());
     outlineMesh = undefined;
   }
   if (currentMesh) {
@@ -164,7 +248,9 @@ function updateGeometry() {
   currentMesh.receiveShadow = true;
   currentMesh.rotation.set(0.16, 0.32, 0);
   if (showOutline) {
-    outlineMesh = new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 22), outlineMaterial);
+    outlineMesh = new THREE.Group();
+    outlineMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 22), outlineMaterial));
+    buildAdditionalContours(activeShape, values[activeShape.id], outlineMesh);
     outlineMesh.scale.setScalar(1.002);
     currentMesh.add(outlineMesh);
   }
