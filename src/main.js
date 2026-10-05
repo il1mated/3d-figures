@@ -118,6 +118,7 @@ const outlineMaterial = new THREE.LineBasicMaterial({ color: '#ffffff', depthTes
 outlineMaterial.toneMapped = false;
 let currentMesh;
 let outlineMesh;
+let boundaryMesh;
 let silhouetteData;
 const outlineCameraPosition = new THREE.Vector3();
 
@@ -133,6 +134,13 @@ function buildGeometry(shape, parameters) {
     case 'octahedron': return new THREE.OctahedronGeometry(parameters.r, parameters.detail);
     default: return new THREE.BoxGeometry(2, 2, 2);
   }
+}
+
+function boundaryThreshold(shape, parameters) {
+  if (shape.id === 'sphere' || (shape.id === 'octahedron' && parameters.detail > 0)) return null;
+  if (shape.id === 'torus') return 18;
+  if (['cylinder', 'cone', 'prism'].includes(shape.id)) return 8;
+  return 22;
 }
 
 function buildSilhouetteData(geometry) {
@@ -240,6 +248,10 @@ function updateGeometry() {
     outlineMesh.geometry.dispose();
     outlineMesh = undefined;
   }
+  if (boundaryMesh) {
+    boundaryMesh.geometry.dispose();
+    boundaryMesh = undefined;
+  }
   silhouetteData = undefined;
   if (currentMesh) {
     scene.remove(currentMesh);
@@ -258,6 +270,13 @@ function updateGeometry() {
     outlineMesh.renderOrder = 1;
     outlineMesh.scale.setScalar(1.008);
     currentMesh.add(outlineMesh);
+    const threshold = boundaryThreshold(activeShape, values[activeShape.id]);
+    if (threshold !== null) {
+      boundaryMesh = new THREE.LineSegments(new THREE.EdgesGeometry(geometry, threshold), outlineMaterial);
+      boundaryMesh.renderOrder = 2;
+      boundaryMesh.scale.setScalar(1.003);
+      currentMesh.add(boundaryMesh);
+    }
   }
   currentMesh.renderOrder = 0;
   scene.add(currentMesh);
@@ -336,6 +355,7 @@ function setupAppearanceControls() {
   outlineToggle.addEventListener('change', () => {
     showOutline = outlineToggle.checked;
     if (outlineMesh) outlineMesh.visible = showOutline;
+    if (boundaryMesh) boundaryMesh.visible = showOutline;
     if (showOutline && !outlineMesh) updateGeometry();
   });
 }
