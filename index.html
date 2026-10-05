@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#080909" />
+    <meta name="description" content="Интерактивная лаборатория 3D-геометрии: изучай фигуры, меняй параметры и вращай их в пространстве." />
+    <title>Forma — лаборатория геометрии</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="wordmark" href="#" aria-label="Forma, на главную">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span>forma<span class="wordmark-dot">.</span></span>
+        </a>
+        <div class="topbar-center"><span class="status-dot"></span><span id="topbar-caption">ЛАБОРАТОРИЯ ФОРМ</span> <span class="topbar-divider">/</span> 01</div>
+        <div class="topbar-actions">
+          <button class="language-toggle" id="language-toggle" type="button" aria-label="Switch to English">EN</button>
+          <a class="topbar-link" id="about-link" href="https://github.com/il1mated" target="_blank" rel="noreferrer">О проекте <span aria-hidden="true">↗</span></a>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="visual-column" aria-label="Просмотр и выбор фигуры">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow" id="hero-eyebrow">ИНТЕРАКТИВНАЯ ГЕОМЕТРИЯ <span>№ 001</span></p>
+              <h1><span id="hero-title">Форма в</span> <em id="hero-accent">пространстве.</em></h1>
+            </div>
+            <button class="reset-button" id="reset-view" type="button" title="Сбросить вращение" aria-label="Сбросить вращение"><span aria-hidden="true">↺</span></button>
+          </div>
+
+          <div class="stage" id="stage">
+            <div class="stage-meta"><span class="live-indicator"></span> <span id="stage-caption">3D-ПРОСМОТР</span> <span class="meta-separator">·</span> <span id="stage-label">КУБ</span></div>
+            <div class="stage-coordinates" aria-hidden="true">X <span>Y</span> Z</div>
+            <div class="stage-hint"><span class="hint-mouse" aria-hidden="true">⌖</span> <span id="stage-hint">ПЕРЕТАЩИ, ЧТОБЫ ВРАЩАТЬ</span></div>
+            <div class="canvas-wrap" id="canvas-wrap"></div>
+            <div class="stage-index" aria-hidden="true">F<span>01</span></div>
+          </div>
+
+          <div class="shape-heading">
+            <div><p class="eyebrow" id="catalog-eyebrow">КАТАЛОГ</p><h2 id="catalog-title">Выбери форму</h2></div>
+            <span class="shape-count"><span id="shape-count">08</span> <span id="shape-count-label">ОБЪЕКТОВ</span></span>
+          </div>
+          <div class="shape-list" id="shape-list" aria-label="Выбор геометрической фигуры"></div>
+        </section>
+
+        <aside class="inspector" id="inspector" aria-label="Параметры выбранной фигуры">
+          <div class="inspector-head">
+            <div><p class="eyebrow" id="settings-eyebrow">НАСТРОЙКИ ОБЪЕКТА</p><h2 id="object-name">Куб</h2></div>
+            <span class="object-number" id="object-number">01 / 08</span>
+          </div>
+          <p class="inspector-copy" id="object-description">Равные стороны. Простая форма, бесконечные возможности.</p>
+
+          <div class="parameter-section">
+            <div class="parameter-heading"><span id="dimensions-label">РАЗМЕРЫ И ФОРМА</span><span class="unit-label" id="units-label">ЕД. ИЗМЕРЕНИЯ <span>—</span></span></div>
+            <div class="parameter-list" id="parameter-list"></div>
+          </div>
+
+          <section class="appearance-section" aria-labelledby="appearance-heading">
+            <div class="appearance-heading" id="appearance-heading">ВНЕШНИЙ ВИД</div>
+            <label class="opacity-control">
+              <span class="appearance-topline"><span id="opacity-label">Прозрачность</span><strong id="opacity-value">100%</strong></span>
+              <span class="range-shell"><input class="parameter-range" id="opacity-range" type="range" min="10" max="100" step="1" value="82" aria-label="Прозрачность" /></span>
+            </label>
+            <label class="outline-control" for="outline-toggle">
+              <span id="outline-label">Белый контур</span>
+              <input id="outline-toggle" type="checkbox" checked />
+              <span class="toggle-switch" aria-hidden="true"></span>
+            </label>
+          </section>
+
+          <div class="readout">
+            <div class="readout-top"><span id="volume-label">ОБЪЁМ</span><span class="readout-symbol" aria-hidden="true">↗</span></div>
+            <div class="readout-value"><span id="volume-value">8.00</span><small id="volume-units">ед.³</small></div>
+            <div class="readout-rule"><span id="volume-bar"></span></div>
+          </div>
+
+          <div class="inspector-footer"><span class="footer-spark" aria-hidden="true">✳</span><span id="live-note">Параметры обновляются в реальном времени</span></div>
+        </aside>
+      </main>
+
+      <footer class="footer">
+        <span class="footer-credit" id="footer-credit">СОЗДАНО ДЛЯ ИЗУЧЕНИЯ ФОРМ</span>
+        <div class="social-links">
+          <a href="https://github.com/il1mated" target="_blank" rel="noreferrer">GITHUB <span>@il1mated</span> ↗</a>
+          <span class="social-divider"></span>
+          <a href="https://t.me/ilimated" target="_blank" rel="noreferrer">TELEGRAM <span>@ilimated</span> ↗</a>
+        </div>
+        <span class="footer-year">© 2026 FORMA</span>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
